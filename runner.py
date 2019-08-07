@@ -19,25 +19,26 @@ def lprint(msg):
     sys.stdout.write(msg)
     sys.stdout.flush()
 
-def telnet_cmd(telnet, command):
-    telnet.write('%s\n' % command)
-    result = telnet.read_until('OK', 10)
-    return result
+
+class CTelnet(telnetlib.Telnet):
+    def write_until(self, command):
+        self.write('%s\n' % command)
+        return self.read_until('OK', 10)
+
 
 def verify_emulator():
     telnet_ok = False
     tn = None
-    while (not telnet_ok):
+    while not telnet_ok:
         try:
-            tn = telnetlib.Telnet('localhost', 5554)
-            if tn is not None:
-                tn.read_until('OK', 10)
-                telnet_cmd(tn, 'avd status')
-                telnet_cmd(tn, 'redir list')
-                telnet_cmd(tn, 'network status')
-                tn.write('quit\n')
-                tn.read_all()
-                telnet_ok = True
+            tn = CTelnet('localhost', 5554)
+            tn.read_until('OK', 10)
+            tn.write_until('avd status')
+            tn.write_until('redir list')
+            tn.write_until('network status')
+            tn.write('quit\n')
+            tn.read_all()
+            telnet_ok = True
         except Exception:
             raise
         finally:
@@ -75,6 +76,18 @@ def check_for_device(name="emulator-5554", wait=True):
     return False
 
 
+def dump_log(filename, reset=True):
+    logs = device.shell("logcat -d")
+    if logs is None:
+        logs = 'None'
+    f = open("emulator.log", "w")
+    try:
+        f.write(logs.encode("utf-8"))
+    finally:
+        f.close()
+    if reset:
+        device.shell('logcat -c')
+
 
 cmd = [emulator, '-avd', AVD, '-gpu', 'on', '-skip-adb-auth', '-verbose',
         '-show-kernel', '-ranchu', '-selinux', 'permissive', '-memory', '3072',
@@ -104,15 +117,23 @@ else:
   print("installing fenix on the emulator")
   device.installPackage('firefox.apk')
 
+device.shell('logcat -c')
 print "launching fenix..."
 extras = {"args": "-marionette"}
 device.startActivity(component="%s/%s" % (app, activity), extras=extras)
 
 # make marionette available locally
 adb("reverse", "tcp:2828", "tcp:2828")
-#
+
+# here, need to wait for the browser to be ready by calling the marionette
+# port until its responsive
+time.sleep(5)
+
+dump_log("fenix_start.log")
+
 # now we can start the browsing here
 import pdb; pdb.set_trace()
+
 if kill_it:
     print("Closing emulator")
     adb("-s", "emulator-5554", "emu", "kill")
