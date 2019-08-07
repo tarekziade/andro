@@ -108,6 +108,9 @@ print "launching fenix..."
 extras = {"args": "-marionette"}
 device.startActivity(component="%s/%s" % (app, activity), extras=extras)
 
+# make marionette available locally
+adb("reverse", "tcp:2828", "tcp:2828")
+#
 # now we can start the browsing here
 import pdb; pdb.set_trace()
 if kill_it:
